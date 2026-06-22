@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ПромТехКомплект</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: #f5f5f5; color: #1a1a1a; }
+        .header { background: #1e3a5f; color: #fff; padding: 15px; text-align: center; font-weight: 600; position: sticky; top: 0; z-index: 100; }
+        .container { max-width: 600px; margin: 0 auto; padding: 15px; }
+        .categories { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 20px; }
+        .category { background: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 8px 18px; white-space: nowrap; font-size: 14px; cursor: pointer; }
+        .category.active { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+        .products { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .product-card { background: #fff; border-radius: 12px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.1s; }
+        .product-card:active { transform: scale(0.98); }
+        .product-card img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; background: #e9e9e9; }
+        .product-name { font-size: 14px; font-weight: 600; margin: 8px 0 4px; }
+        .product-price { font-weight: 700; color: #c00; }
+        .btn { background: #1e3a5f; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; }
+        .btn-outline { background: #fff; color: #1e3a5f; border: 1px solid #1e3a5f; }
+        .cart-icon { position: fixed; top: 20px; right: 20px; background: #fff; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; z-index: 200; }
+        .cart-count { position: absolute; top: -4px; right: -4px; background: #c00; color: #fff; border-radius: 10px; padding: 2px 6px; font-size: 12px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 300; }
+        .modal-content { background: #fff; border-radius: 16px; padding: 20px; width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto; }
+        .variation-select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc; margin: 8px 0; }
+        @media (max-width: 400px) { .products { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="header">ПромТехКомплект</div>
+    <div class="cart-icon" onclick="openCart()">
+        🛒
+        <span class="cart-count" id="cartCount" style="display:none">0</span>
+    </div>
+
+    <div class="container">
+        <!-- Категории -->
+        <div class="categories">
+            <div class="category active" data-category="all">Всё</div>
+            <div class="category" data-category="relay">Реле</div>
+            <div class="category" data-category="sensors">Датчики</div>
+            <div class="category" data-category="pneumatics">Пневматика</div>
+        </div>
+
+        <!-- Сетка товаров -->
+        <div class="products" id="productsGrid"></div>
+    </div>
+
+    <!-- Модалка карточки товара -->
+    <div class="modal" id="productModal">
+        <div class="modal-content" id="productModalContent"></div>
+    </div>
+
+    <!-- Модалка корзины -->
+    <div class="modal" id="cartModal">
+        <div class="modal-content" id="cartModalContent"></div>
+    </div>
+
+    <!-- Модалка оформления -->
+    <div class="modal" id="checkoutModal">
+        <div class="modal-content" id="checkoutModalContent"></div>
+    </div>
+
+    <script>
+        // Демо-данные (в реальности загружаются с API)
+        const products = [
+            {
+                id: 1,
+                category: 'relay',
+                name: 'Реле промежуточное РЭК 78/3',
+                description: 'Для коммутации цепей управления. Степень защиты IP40.',
+                images: ['https://via.placeholder.com/300x200/eee?text=Реле'],
+                tech_specs: { 'Ном. напряжение': '12...220 В', 'Контакты': '3NO+1NC', 'Мех. износостойкость': '10^7 циклов' },
+                variations: [
+                    { id: 101, attrs: { 'Напряжение': '12В' }, price: 850, stock: 10 },
+                    { id: 102, attrs: { 'Напряжение': '24В' }, price: 890, stock: 5 }
+                ]
+            },
+            {
+                id: 2,
+                category: 'sensors',
+                name: 'Датчик оптический EE-SX672',
+                description: 'Щелевой оптический датчик. NPN выход.',
+                images: ['https://via.placeholder.com/300x200/eee?text=Датчик'],
+                tech_specs: { 'Ширина щели': '5 мм', 'Выход': 'NPN' },
+                variations: [
+                    { id: 201, attrs: { 'Подключение': 'Кабель 2м' }, price: 1200, stock: 3 }
+                ]
+            }
+        ];
+
+        const deliveryMethods = [
+            { id: 1, name: 'Самовывоз (ул. Индустриальная, 5)' },
+            { id: 2, name: 'Доставка курьером по городу' },
+            { id: 3, name: 'Транспортная компания (СДЭК)' }
+        ];
+
+        // Состояние
+        let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+        let currentProduct = null;
+        let selectedVariationId = null;
+
+        // Рендер сетки товаров
+        function renderProducts(filterCategory = 'all') {
+            const grid = document.getElementById('productsGrid');
+            const filtered = filterCategory === 'all' ? products : products.filter(p => p.category === filterCategory);
+            grid.innerHTML = filtered.map(p => `
+                <div class="product-card" onclick="openProduct(${p.id})">
+                    <img src="${p.images[0]}" alt="${p.name}">
+                    <div class="product-name">${p.name}</div>
+                    <div class="product-price">от ${Math.min(...p.variations.map(v => v.price))} ₽</div>
+                </div>
+            `).join('');
+        }
+
+        // Открыть карточку товара
+        function openProduct(productId) {
+            currentProduct = products.find(p => p.id === productId);
+            selectedVariationId = currentProduct.variations[0]?.id || null;
+            renderProductModal();
+            document.getElementById('productModal').style.display = 'flex';
+        }
+
+        function renderProductModal() {
+            const p = currentProduct;
+            const varOptions = p.variations.map(v => `<option value="${v.id}" ${selectedVariationId === v.id ? 'selected' : ''}>${Object.values(v.attrs).join(', ')} — ${v.price} ₽</option>`).join('');
+            document.getElementById('productModalContent').innerHTML = `
+                <h3>${p.name}</h3>
+                <img src="${p.images[0]}" style="width:100%; border-radius:8px; margin:10px 0">
+                <p>${p.description}</p>
+                <h4>Характеристики</h4>
+                <ul>${Object.entries(p.tech_specs).map(([k,v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
+                <label>Модификация:</label>
+                <select class="variation-select" onchange="selectedVariationId = parseInt(this.value)">
+                    ${varOptions}
+                </select>
+                <div style="display:flex; gap:10px; margin-top:15px">
+                    <button class="btn" onclick="addToCart(selectedVariationId); closeModal('productModal')">В корзину</button>
+                    <button class="btn btn-outline" onclick="addToCart(selectedVariationId); closeModal('productModal'); openCheckout()">Купить сейчас</button>
+                </div>
+                <button style="margin-top:8px; background:none; border:none; color:#1e3a5f" onclick="closeModal('productModal')">Закрыть</button>
+            `;
+        }
+
+        // Корзина
+        function addToCart(variationId) {
+            if (!variationId) return;
+            const existing = cart.find(item => item.variationId === variationId);
+            if (existing) existing.quantity++;
+            else cart.push({ variationId, quantity: 1 });
+            saveCart();
+            updateCartCount();
+        }
+
+        function removeFromCart(variationId) {
+            cart = cart.filter(item => item.variationId !== variationId);
+            saveCart();
+            updateCartCount();
+            if (document.getElementById('cartModal').style.display === 'flex') renderCartModal();
+        }
+
+        function updateCartCount() {
+            const count = cart.reduce((sum, i) => sum + i.quantity, 0);
+            document.getElementById('cartCount').style.display = count ? 'block' : 'none';
+            document.getElementById('cartCount').textContent = count;
+        }
+
+        function saveCart() { localStorage.setItem('cart', JSON.stringify(cart)); }
+
+        function getVariationById(id) {
+            for (let p of products) {
+                const v = p.variations.find(v => v.id === id);
+                if (v) return { ...v, product: p };
+            }
+            return null;
+        }
+
+        function openCart() {
+            renderCartModal();
+            document.getElementById('cartModal').style.display = 'flex';
+        }
+
+        function renderCartModal() {
+            let html = '<h3>Корзина</h3>';
+            if (cart.length === 0) html += '<p>Пусто</p>';
+            else {
+                html += '<ul>';
+                cart.forEach(item => {
+                    const v = getVariationById(item.variationId);
+                    if (!v) return;
+                    html += `<li style="margin-bottom:8px">${v.product.name} (${Object.values(v.attrs).join(', ')}) — ${v.price} ₽ x ${item.quantity}
+                        <button onclick="removeFromCart(${item.variationId})">❌</button></li>`;
+                });
+                html += '</ul>';
+                const total = cart.reduce((sum, item) => {
+                    const v = getVariationById(item.variationId);
+                    return sum + (v ? v.price * item.quantity : 0);
+                }, 0);
+                html += `<strong>Итого: ${total} ₽</strong>`;
+                html += `<div style="margin-top:15px"><button class="btn" onclick="openCheckout()">Оформить заказ</button></div>`;
+            }
+            html += '<button style="margin-top:8px; background:none; border:none; color:#1e3a5f" onclick="closeModal(\'cartModal\')">Закрыть</button>';
+            document.getElementById('cartModalContent').innerHTML = html;
+        }
+
+        // Оформление заказа
+        function openCheckout() {
+            document.getElementById('cartModal').style.display = 'none';
+            document.getElementById('productModal').style.display = 'none';
+            let html = '<h3>Оформление заказа</h3>';
+            html += '<input placeholder="Имя" id="cName" style="width:100%; padding:10px; margin:6px 0"><br>';
+            html += '<input placeholder="Телефон" id="cPhone" style="width:100%; padding:10px; margin:6px 0"><br>';
+
+            html += '<label>Способ доставки:</label><select id="delivery" class="variation-select">';
+            deliveryMethods.forEach(d => html += `<option value="${d.id}">${d.name}</option>`);
+            html += '</select><br>';
+
+            html += '<input placeholder="Адрес (если нужно)" id="cAddress" style="width:100%; padding:10px; margin:6px 0"><br>';
+
+            html += '<label>Способ оплаты:</label><select id="paymentType" class="variation-select">';
+            html += '<option value="online">Оплатить онлайн</option>';
+            html += '<option value="invoice">Запросить счёт</option>';
+            html += '</select><br>';
+
+            html += '<textarea placeholder="Комментарий" id="cComment" style="width:100%; padding:10px; margin:6px 0"></textarea><br>';
+            html += '<button class="btn" onclick="submitOrder()">Подтвердить заказ</button>';
+            html += '<button style="margin-top:8px; background:none; border:none; color:#1e3a5f" onclick="closeModal(\'checkoutModal\')">Назад</button>';
+
+            document.getElementById('checkoutModalContent').innerHTML = html;
+            document.getElementById('checkoutModal').style.display = 'flex';
+        }
+
+        function submitOrder() {
+            const order = {
+                name: document.getElementById('cName').value,
+                phone: document.getElementById('cPhone').value,
+                delivery_method_id: document.getElementById('delivery').value,
+                address: document.getElementById('cAddress').value,
+                payment_type: document.getElementById('paymentType').value,
+                comment: document.getElementById('cComment').value,
+                items: cart
+            };
+            console.log('Заказ:', order);
+            alert('Заказ сформирован! (смотри консоль)');
+            cart = [];
+            saveCart();
+            updateCartCount();
+            closeModal('checkoutModal');
+        }
+
+        // Общие функции
+        function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+        window.onclick = function(e) {
+            if (e.target.classList.contains('modal')) e.target.style.display = 'none';
+        }
+
+        // Категории
+        document.querySelectorAll('.category').forEach(el => {
+            el.addEventListener('click', function() {
+                document.querySelectorAll('.category').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+                renderProducts(this.dataset.category);
+            });
+        });
+
+        // Инициализация
+        renderProducts();
+        updateCartCount();
+    </script>
+</body>
+</html>
