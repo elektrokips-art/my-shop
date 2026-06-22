@@ -1,6 +1,6 @@
 const { Telegraf, Markup } = require('telegraf');
 
-const BOT_TOKEN = "8610089534:AAE6GXLtxHhm3WHVWJA7sYWatZ3fEw7KVf8";
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_ID  = "5881087734";
 const SHOP_URL  = "https://myshoperor.netlify.app";
 
